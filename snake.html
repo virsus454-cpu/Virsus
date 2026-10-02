@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Змейка</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;display:flex;justify-content:center;align-items:center;font-family:Arial,sans-serif;background:#020617;color:#e0f2fe;overscroll-behavior:none}
+.game-container{width:95%;max-width:700px;padding:25px;background:#07152e;border:1px solid #163b68;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+h1{text-align:center;margin-bottom:20px;color:#38bdf8;font-size:38px}
+.game-info{display:flex;justify-content:space-between;gap:10px;margin-bottom:15px}
+.info-box{flex:1;padding:12px;text-align:center;background:#0a2042;border:1px solid #164e7a;border-radius:10px}
+.info-title{display:block;color:#7dd3fc;font-size:13px;margin-bottom:5px}
+.info-value{font-size:22px;font-weight:bold;color:white}
+.canvas-wrapper{display:flex;justify-content:center}
+canvas{display:block;width:100%;max-width:600px;height:auto;background:#031126;border:3px solid #155e9c;border-radius:10px;box-shadow:0 0 20px rgba(14,165,233,.15)}
+.buttons{display:flex;justify-content:center;gap:10px;margin-top:18px}
+button{border:none;border-radius:10px;padding:12px 20px;background:#0c4a6e;color:white;font-size:15px;font-weight:bold;cursor:pointer;transition:background .2s,transform .1s}
+button:hover{background:#0369a1;transform:translateY(-2px)}
+button:active{transform:scale(.95)}
+.mobile-controls{display:grid;grid-template-columns:72px 72px 72px;grid-template-rows:72px 72px;justify-content:center;align-items:center;gap:10px;margin-top:22px;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.control-button{width:72px;height:72px;padding:0;display:flex;justify-content:center;align-items:center;background:#0a3157;color:#bae6fd;border:2px solid #155e9c;border-radius:18px;font-size:28px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:background .1s,transform .1s,border-color .1s}
+.control-button:active{background:#0369a1;border-color:#38bdf8;transform:scale(.9)}
+.up{grid-column:2;grid-row:1}.left{grid-column:1;grid-row:2}.down{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}
+.help{margin-top:18px;text-align:center;color:#7da5c7;font-size:14px;line-height:1.5}
+@media(max-width:600px){
+.game-container{width:100%;min-height:100vh;padding:12px;border-radius:0}
+h1{font-size:28px;margin-bottom:12px}
+.game-info{gap:6px;margin-bottom:10px}
+.info-box{padding:8px 5px}.info-title{font-size:11px}.info-value{font-size:18px}
+canvas{border-width:2px}
+.buttons{gap:7px;margin-top:14px}
+.buttons button{flex:1;min-height:48px;padding:8px 5px;font-size:13px}
+.mobile-controls{grid-template-columns:76px 76px 76px;grid-template-rows:76px 76px;gap:8px;margin-top:18px}
+.control-button{width:76px;height:76px;border-radius:20px;font-size:30px}
+.help{margin-top:14px;font-size:12px}
+}
+@media(max-width:380px){
+.mobile-controls{grid-template-columns:64px 64px 64px;grid-template-rows:64px 64px;gap:7px}
+.control-button{width:64px;height:64px;border-radius:16px;font-size:25px}
+}
+</style>
+</head>
+<body>
+<div class="game-container">
+<h1>🐍 Змейка</h1>
+<div class="game-info">
+<div class="info-box"><span class="info-title">СЧЁТ</span><span class="info-value" id="score">0</span></div>
+<div class="info-box"><span class="info-title">РЕКОРД</span><span class="info-value" id="highScore">0</span></div>
+<div class="info-box"><span class="info-title">РАЗМЕР</span><span class="info-value" id="snakeSize">3</span></div>
+</div>
+<div class="canvas-wrapper"><canvas id="gameCanvas" width="600" height="600"></canvas></div>
+<div class="buttons">
+<button id="startButton">▶ Начать</button>
+<button id="pauseButton">⏸ Пауза</button>
+<button id="soundButton">🔊 Звук</button>
+</div>
+<div class="mobile-controls">
+<button class="control-button up" data-direction="up">▲</button>
+<button class="control-button left" data-direction="left">◀</button>
+<button class="control-button down" data-direction="down">▼</button>
+<button class="control-button right" data-direction="right">▶</button>
+</div>
+<div class="help">Управление: стрелки или WASD<br>На телефоне используй кнопки выше<br>Собирай фрукты и не врезайся в стены или себя!</div>
+</div>
+<script>
+const canvas=document.getElementById("gameCanvas"),ctx=canvas.getContext("2d");
+const scoreElement=document.getElementById("score"),highScoreElement=document.getElementById("highScore"),snakeSizeElement=document.getElementById("snakeSize");
+const startButton=document.getElementById("startButton"),pauseButton=document.getElementById("pauseButton"),soundButton=document.getElementById("soundButton");
+const CELL_SIZE=30,CELL_COUNT=canvas.width/CELL_SIZE,GAME_SPEED=110;
+let snake=[],fruit={x:10,y:10},direction={x:1,y:0},nextDirection={x:1,y:0},score=0;
+let highScore=localStorage.getItem("snakeHighScore")||0,gameRunning=false,gamePaused=false,gameTimer=null,soundEnabled=true,audioContext=null;
+const fruits=[{emoji:"🍎",color:"#ef4444"},{emoji:"🍊",color:"#f97316"},{emoji:"🍇",color:"#a855f7"},{emoji:"🍓",color:"#ec4899"},{emoji:"🍏",color:"#84cc16"}];
+let currentFruit=fruits[0];
+
+function startGame(){
+ clearInterval(gameTimer);
+ snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+ direction={x:1,y:0};nextDirection={x:1,y:0};score=0;gameRunning=true;gamePaused=false;
+ pauseButton.textContent="⏸ Пауза";updateInterface();createFruit();gameTimer=setInterval(gameLoop,GAME_SPEED);draw();playSound(500,.08);
+}
+function gameLoop(){
+ if(!gameRunning||gamePaused)return;
+ direction=nextDirection;
+ const head={x:snake[0].x+direction.x,y:snake[0].y+direction.y};
+ if(checkCollision(head)){gameOver();return}
+ snake.unshift(head);
+ if(head.x===fruit.x&&head.y===fruit.y){score++;playEatSound();createFruit()}else snake.pop();
+ updateInterface();draw();
+}
+function checkCollision(head){
+ if(head.x<0||head.x>=CELL_COUNT||head.y<0||head.y>=CELL_COUNT)return true;
+ for(let part of snake)if(head.x===part.x&&head.y===part.y)return true;
+ return false;
+}
+function createFruit(){
+ let newFruit;
+ do{newFruit={x:Math.floor(Math.random()*CELL_COUNT),y:Math.floor(Math.random()*CELL_COUNT)}}while(isSnakePosition(newFruit));
+ fruit=newFruit;currentFruit=fruits[Math.floor(Math.random()*fruits.length)];
+}
+function isSnakePosition(position){return snake.some(part=>part.x===position.x&&part.y===position.y)}
+function draw(){
+ ctx.fillStyle="#031126";ctx.fillRect(0,0,canvas.width,canvas.height);drawGrid();drawFruit();drawSnake();if(gamePaused)drawPauseScreen();
+}
+function drawGrid(){
+ ctx.strokeStyle="rgba(56,189,248,.05)";ctx.lineWidth=1;
+ for(let i=0;i<=CELL_COUNT;i++){const p=i*CELL_SIZE;ctx.beginPath();ctx.moveTo(p,0);ctx.lineTo(p,canvas.height);ctx.stroke();ctx.beginPath();ctx.moveTo(0,p);ctx.lineTo(canvas.width,p);ctx.stroke()}
+}
+function drawSnake(){
+ snake.forEach((part,index)=>{
+  const x=part.x*CELL_SIZE,y=part.y*CELL_SIZE;
+  ctx.fillStyle=index===0?"#38bdf8":"#0ea5e9";
+  roundRect(ctx,x+2,y+2,CELL_SIZE-4,CELL_SIZE-4,7);ctx.fill();
+  if(index===0)drawEyes(x,y);
+ });
+}
+function drawEyes(x,y){
+ ctx.fillStyle="#020617";let eye1,eye2;
+ if(direction.x===1){eye1={x:x+20,y:y+8};eye2={x:x+20,y:y+20}}
+ else if(direction.x===-1){eye1={x:x+10,y:y+8};eye2={x:x+10,y:y+20}}
+ else if(direction.y===-1){eye1={x:x+8,y:y+10};eye2={x:x+20,y:y+10}}
+ else{eye1={x:x+8,y:y+20};eye2={x:x+20,y:y+20}}
+ ctx.beginPath();ctx.arc(eye1.x,eye1.y,2.5,0,Math.PI*2);ctx.fill();
+ ctx.beginPath();ctx.arc(eye2.x,eye2.y,2.5,0,Math.PI*2);ctx.fill();
+}
+function drawFruit(){
+ const x=fruit.x*CELL_SIZE,y=fruit.y*CELL_SIZE;
+ ctx.fillStyle=currentFruit.color;ctx.beginPath();ctx.arc(x+CELL_SIZE/2,y+CELL_SIZE/2,10,0,Math.PI*2);ctx.fill();
+ ctx.font="20px Arial";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(currentFruit.emoji,x+CELL_SIZE/2,y+CELL_SIZE/2);
+}
+function drawPauseScreen(){
+ ctx.fillStyle="rgba(2,6,23,.75)";ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.fillStyle="#38bdf8";ctx.font="bold 40px Arial";ctx.textAlign="center";ctx.fillText("ПАУЗА",canvas.width/2,canvas.height/2);
+}
+function roundRect(context,x,y,width,height,radius){
+ context.beginPath();context.moveTo(x+radius,y);context.lineTo(x+width-radius,y);
+ context.quadraticCurveTo(x+width,y,x+width,y+radius);context.lineTo(x+width,y+height-radius);
+ context.quadraticCurveTo(x+width,y+height,x+width-radius,y+height);context.lineTo(x+radius,y+height);
+ context.quadraticCurveTo(x,y+height,x,y+height-radius);context.lineTo(x,y+radius);context.quadraticCurveTo(x,y,x+radius,y);context.closePath();
+}
+document.addEventListener("keydown",event=>{
+ const key=event.key.toLowerCase();
+ if((key==="arrowup"||key==="w")&&direction.y!==1)nextDirection={x:0,y:-1};
+ if((key==="arrowdown"||key==="s")&&direction.y!==-1)nextDirection={x:0,y:1};
+ if((key==="arrowleft"||key==="a")&&direction.x!==1)nextDirection={x:-1,y:0};
+ if((key==="arrowright"||key==="d")&&direction.x!==-1)nextDirection={x:1,y:0};
+ if(key===" ")togglePause();
+});
+document.querySelectorAll(".control-button").forEach(button=>{
+ button.addEventListener("pointerdown",function(event){event.preventDefault();changeDirection(this.dataset.direction)});
+});
+function changeDirection(name){
+ if(name==="up"&&direction.y!==1)nextDirection={x:0,y:-1};
+ else if(name==="down"&&direction.y!==-1)nextDirection={x:0,y:1};
+ else if(name==="left"&&direction.x!==1)nextDirection={x:-1,y:0};
+ else if(name==="right"&&direction.x!==-1)nextDirection={x:1,y:0};
+}
+function togglePause(){
+ if(!gameRunning)return;
+ gamePaused=!gamePaused;pauseButton.textContent=gamePaused?"▶ Продолжить":"⏸ Пауза";draw();
+}
+pauseButton.addEventListener("click",togglePause);
+startButton.addEventListener("click",startGame);
+function gameOver(){
+ gameRunning=false;clearInterval(gameTimer);
+ if(score>highScore){highScore=score;localStorage.setItem("snakeHighScore",highScore)}
+ updateInterface();playGameOverSound();
+ setTimeout(()=>alert("Игра окончена!\n\nТвой счёт: "+score),100);
+}
+function updateInterface(){scoreElement.textContent=score;highScoreElement.textContent=highScore;snakeSizeElement.textContent=snake.length}
+function initAudio(){
+ if(!audioContext)audioContext=new(window.AudioContext||window.webkitAudioContext)();
+ if(audioContext.state==="suspended")audioContext.resume();
+}
+function playSound(frequency,duration){
+ if(!soundEnabled)return;initAudio();
+ const oscillator=audioContext.createOscillator(),gain=audioContext.createGain();
+ oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.frequency.value=frequency;oscillator.type="sine";
+ gain.gain.setValueAtTime(.08,audioContext.currentTime);
+ gain.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+duration);
+ oscillator.start();oscillator.stop(audioContext.currentTime+duration);
+}
+function playEatSound(){playSound(700,.08);setTimeout(()=>playSound(900,.08),70)}
+function playGameOverSound(){if(!soundEnabled)return;playSound(250,.2);setTimeout(()=>playSound(180,.3),150)}
+soundButton.addEventListener("click",()=>{
+ soundEnabled=!soundEnabled;
+ if(soundEnabled){soundButton.textContent="🔊 Звук";playSound(600,.1)}else soundButton.textContent="🔇 Без звука";
+});
+snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];createFruit();updateInterface();draw();
+</script>
+</body>
+</html>
